@@ -32,6 +32,19 @@ const rows = csv.trim().split(/\r?\n/);
 assert.equal(rows.length, 101);
 const code = rows[1].split(",")[0];
 assert.equal(new Set(rows.slice(1).map((r) => r.split(",")[0])).size, 100);
+for (const [id, title] of [
+  ["past", "你的上一世是什么？"],
+  ["next", "你的下一世是什么？"],
+  ["cat", "你是哪一种流浪猫？"],
+  ["end", "末世来临，你会变成什么动物？"],
+]) {
+  await page.goto(origin + "/quiz/" + id);
+  await page.getByRole("heading", { name: title, exact: true }).waitFor();
+  await page.getByLabel("测评码", { exact: true }).waitFor();
+  await page.reload();
+  await page.getByRole("heading", { name: title, exact: true }).waitFor();
+  assert.equal(await page.title(), title + " · 灵魂小馆");
+}
 await page.goto(origin);
 await page.getByRole("heading", { name: "如果换一种身份，" }).waitFor();
 await page.screenshot({
@@ -45,9 +58,10 @@ assert.equal(
   true,
 );
 await page
-  .getByRole("button")
+  .getByRole("link")
   .filter({ has: page.getByRole("heading", { name: "你的上一世是什么？" }) })
   .click();
+assert.equal(new URL(page.url()).pathname, "/quiz/past");
 await page.getByLabel("测评码", { exact: true }).fill(code);
 await page.getByRole("button", { name: "解锁我的档案" }).click();
 await page.getByRole("button", { name: "开始测评" }).click();
@@ -64,6 +78,19 @@ for (let i = 0; i < 24; i++) {
     .locator(".options button")
     .nth(i % 4)
     .click();
+  if (i === 0) {
+    await page.getByText("生活片段 02", { exact: true }).waitFor();
+    await page.goto(origin + "/quiz/cat");
+    await page
+      .getByRole("heading", { name: "你是哪一种流浪猫？", exact: true })
+      .waitFor();
+    await page.getByLabel("测评码", { exact: true }).waitFor();
+    assert.equal(await page.locator(".question").count(), 0);
+    await page.goto(origin);
+    await page.locator(".catalog").waitFor();
+    await page.goto(origin + "/quiz/past");
+    await page.getByText("生活片段 02", { exact: true }).waitFor();
+  }
 }
 // Go back and change the preceding answer, then return to last question.
 await page.getByRole("button", { name: "上一题" }).click();
@@ -82,6 +109,9 @@ assert.equal(
   true,
 );
 const resultId = new URL(page.url()).pathname.split("/").pop();
+assert.equal(new URL(page.url()).pathname, "/quiz/past/result/" + resultId);
+await page.reload();
+await page.locator(".dossier").first().waitFor();
 const data = await (
   await context.request.get(origin + "/api/results/" + resultId)
 ).json();
@@ -108,6 +138,9 @@ assert.equal(
   await sharePage.locator(".result-title h1").textContent(),
   data.report.headline,
 );
+await sharePage.getByRole("button", { name: "我也测这款" }).click();
+assert.equal(new URL(sharePage.url()).pathname, "/quiz/past");
+await sharePage.getByLabel("测评码", { exact: true }).waitFor();
 const privateResponse = await stranger.request.get(
   origin + "/api/results/" + resultId,
 );
@@ -125,5 +158,5 @@ await desktopPage.screenshot({
 assert.deepEqual(errors, []);
 await browser.close();
 console.log(
-  "PASS: mobile navigation, 100 unique codes, 24 questions, back/edit, result, PNG, anonymous sharing, private ownership, desktop rendering.",
+  "PASS: four direct entries and reload, separate product progress, product result route, mobile navigation, 100 unique codes, 24 questions, back/edit, PNG, anonymous sharing, private ownership, desktop rendering.",
 );

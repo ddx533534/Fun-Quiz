@@ -17,6 +17,7 @@ type Attempt = {
   revision: number;
   result_id: string | null;
   remaining: number;
+  expires: number;
 };
 type Card = {
   variant_name: string;
@@ -212,13 +213,73 @@ function App() {
       setBusy(false);
     }
   }
-  async function loadResult(id: string) {
+  async function loadResult(id: string, expectedProduct?: ProductId) {
     const data = await api<Result>("/results/" + id);
+    if (expectedProduct && data.report.product !== expectedProduct) {
+      throw new Error("这个结果不属于当前测评，请使用原来的结果链接。");
+    }
     setResult(data);
+    setSelected(data.report.product);
     setResultId(id);
     setPublicView(false);
     setScreen("result");
-    history.replaceState(null, "", "/result/" + id);
+    history.replaceState(
+      null,
+      "",
+      "/quiz/" + data.report.product + "/result/" + id,
+    );
+  }
+  async function enterProduct(id: ProductId) {
+    setSelected(id);
+    setCode("");
+    setGrant("");
+    setAttempt(null);
+    setResult(null);
+    setPublicView(false);
+    setScreen("code");
+    setError("");
+    const storageKey = "quiz-attempt:" + id;
+    const saved = sessionStorage.getItem(storageKey);
+    if (!saved) return;
+    const a = await api<Attempt>("/attempts/" + saved);
+    if (a.product !== id || (!a.result_id && a.expires <= Date.now() / 1000)) {
+      sessionStorage.removeItem(storageKey);
+      return;
+    }
+    if (a.result_id) await loadResult(a.result_id, id);
+    else {
+      setAttempt(a);
+      setIndex(Math.min(Object.keys(a.answers).length, 23));
+      setScreen("quiz");
+    }
+  }
+  async function openPath() {
+    setError("");
+    const path = location.pathname;
+    const entry = path.match(/^\/quiz\/(past|next|cat|end)\/?$/);
+    const resultPath = path.match(
+      /^\/quiz\/(past|next|cat|end)\/result\/([^/]+)$/,
+    );
+    if (entry) await enterProduct(entry[1] as ProductId);
+    else if (resultPath)
+      await loadResult(resultPath[2], resultPath[1] as ProductId);
+    else if (path.startsWith("/s/")) {
+      const data = await api<Result>("/share/" + path.slice(3));
+      setResult(data);
+      setSelected(data.report.product);
+      setPublicView(true);
+      setScreen("result");
+    } else if (path.startsWith("/result/")) await loadResult(path.slice(8));
+    else if (path === "/admin") {
+      setSelected(null);
+      setScreen("admin");
+    } else {
+      setSelected(null);
+      setResult(null);
+      setPublicView(false);
+      setScreen("home");
+      if (path !== "/") setError("没有找到这个测评入口，请从下方选择。");
+    }
   }
   useEffect(() => {
     void (async () => {
@@ -228,31 +289,34 @@ function App() {
         setAdmin(session.admin);
         const catalog = await api<{ products: Product[] }>("/catalog");
         setProducts(catalog.products);
-        const path = location.pathname;
-        if (path.startsWith("/s/")) {
-          setResult(await api<Result>("/share/" + path.slice(3)));
-          setPublicView(true);
-          setScreen("result");
-        } else if (path.startsWith("/result/")) await loadResult(path.slice(8));
-        else if (path === "/admin") setScreen("admin");
-        else {
-          const saved = sessionStorage.getItem("quiz-attempt");
-          if (saved) {
-            const a = await api<Attempt>("/attempts/" + saved);
-            if (a.result_id) await loadResult(a.result_id);
-            else {
-              setAttempt(a);
-              setSelected(a.product);
-              setIndex(Math.min(Object.keys(a.answers).length, 23));
-              setScreen("quiz");
-            }
+        // Migrate old preview progress without redirecting another product's entry.
+        const legacy = sessionStorage.getItem("quiz-attempt");
+        if (legacy) {
+          try {
+            const a = await api<Attempt>("/attempts/" + legacy);
+            sessionStorage.setItem("quiz-attempt:" + a.product, a.id);
+            sessionStorage.removeItem("quiz-attempt");
+          } catch {
+            /* A stale legacy preview must not block a new entry. */
           }
         }
+        await openPath();
       } catch (e) {
         setError(e instanceof Error ? e.message : "页面加载失败");
       }
     })();
+    const onPopState = () => {
+      void openPath().catch((e) =>
+        setError(e instanceof Error ? e.message : "页面加载失败"),
+      );
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
   }, []);
+  useEffect(() => {
+    document.title =
+      (selected ? meta[selected].title + " · " : "") + "灵魂小馆";
+  }, [selected]);
   useEffect(
     () => () => {
       if (poster) URL.revokeObjectURL(poster);
@@ -264,13 +328,13 @@ function App() {
     setError("");
     setResult(null);
     setPublicView(false);
-    history.replaceState(null, "", "/");
+    setSelected(null);
+    if (location.pathname !== "/") history.pushState(null, "", "/");
   }
   function choose(id: ProductId) {
-    setSelected(id);
-    setCode("");
-    setScreen("code");
-    setError("");
+    if (location.pathname !== "/quiz/" + id)
+      history.pushState(null, "", "/quiz/" + id);
+    void run(() => enterProduct(id));
   }
   function verify() {
     void run(async () => {
@@ -289,7 +353,7 @@ function App() {
     void run(async () => {
       const data = await api<Attempt>("/attempts", "POST", { grant_id: grant });
       setAttempt(data);
-      sessionStorage.setItem("quiz-attempt", data.id);
+      sessionStorage.setItem("quiz-attempt:" + data.product, data.id);
       setIndex(Math.min(Object.keys(data.answers).length, 23));
       setScreen("quiz");
     });
@@ -314,7 +378,7 @@ function App() {
         { answers: attempt.answers },
       );
       setRemaining(data.remaining);
-      sessionStorage.removeItem("quiz-attempt");
+      sessionStorage.removeItem("quiz-attempt:" + attempt.product);
       await loadResult(data.result_id);
     });
   }
@@ -512,10 +576,15 @@ function App() {
           </div>
           <div className="catalog">
             {products.map((p) => (
-              <button
+              <a
                 className={"product product-" + p.id}
                 key={p.id}
-                onClick={() => choose(p.id)}
+                href={"/quiz/" + p.id}
+                onClick={(e) => {
+                  if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+                  e.preventDefault();
+                  choose(p.id);
+                }}
               >
                 <div className="product-top">
                   <span>{meta[p.id].tag}</span>
@@ -528,7 +597,7 @@ function App() {
                   <span>24道题 · 约5分钟</span>
                   <b>打开档案 ↗</b>
                 </div>
-              </button>
+              </a>
             ))}
           </div>
           <div className="home-note">
@@ -722,8 +791,14 @@ function App() {
                 复制结果链接 ↗
               </button>
             )}
+            <button
+              className="quiet"
+              onClick={() => choose(result.report.product)}
+            >
+              {publicView ? "我也测这款" : "再测一次这款"}
+            </button>
             <button className="quiet" onClick={home}>
-              {publicView ? "我也来测一测" : "看看其他身份"}
+              查看四款测评
             </button>
             {!publicView && result.share_url && (
               <button
