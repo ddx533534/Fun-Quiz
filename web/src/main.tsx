@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { apiUrl, siteUrl, readApiResponse } from "./api";
 import "./style.css";
 
 type ProductId = "past" | "next" | "cat" | "end";
@@ -77,7 +78,7 @@ const meta: Record<
 };
 let csrf = "";
 async function api<T>(url: string, method = "GET", body?: unknown): Promise<T> {
-  const res = await fetch("/api" + url, {
+  const res = await fetch(apiUrl(url), {
     method,
     credentials: "same-origin",
     headers: {
@@ -86,9 +87,7 @@ async function api<T>(url: string, method = "GET", body?: unknown): Promise<T> {
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.detail || "网络暂时没连上，请重试");
-  return data;
+  return readApiResponse<T>(res);
 }
 function Glyph({ kind }: { kind: ProductId }) {
   return (
@@ -225,7 +224,7 @@ function App() {
     history.replaceState(
       null,
       "",
-      "/quiz/" + data.report.product + "/result/" + id,
+      siteUrl("/quiz/" + data.report.product + "/result/" + id),
     );
   }
   async function enterProduct(id: ProductId) {
@@ -328,11 +327,11 @@ function App() {
     setResult(null);
     setPublicView(false);
     setSelected(null);
-    if (location.pathname !== "/") history.pushState(null, "", "/");
+    if (location.pathname !== "/") history.pushState(null, "", siteUrl("/"));
   }
   function choose(id: ProductId) {
     if (location.pathname !== "/quiz/" + id)
-      history.pushState(null, "", "/quiz/" + id);
+      history.pushState(null, "", siteUrl("/quiz/" + id));
     void run(() => enterProduct(id));
   }
   function verify() {
@@ -532,7 +531,7 @@ function App() {
     >
       <header>
         <a
-          href="/"
+          href={siteUrl("/")}
           onClick={(e) => {
             e.preventDefault();
             home();
@@ -581,7 +580,7 @@ function App() {
               <a
                 className={"product product-" + p.id}
                 key={p.id}
-                href={"/quiz/" + p.id}
+                href={siteUrl("/quiz/" + p.id)}
                 onClick={(e) => {
                   if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
                   e.preventDefault();
@@ -886,7 +885,7 @@ function App() {
                     <p>请在24小时内下载并妥善保管。重复点击不会重复生成。</p>
                     <a
                       className="secondary"
-                      href={"/api/admin/batches/" + batch.id + "/export"}
+                      href={apiUrl("/admin/batches/" + batch.id + "/export")}
                     >
                       下载测评码 CSV
                     </a>
