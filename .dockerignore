@@ -1,0 +1,11 @@
+.git
+.venv
+web/node_modules
+web/dist
+.env
+local-secrets.json
+*.db
+*.db-*
+*.csv
+test-artifacts
+.tools

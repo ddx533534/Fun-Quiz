@@ -1,0 +1,5 @@
+quiz.example.com {
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:8000
+    # Deliberately do not log URLs: share tokens are private capability links.
+}

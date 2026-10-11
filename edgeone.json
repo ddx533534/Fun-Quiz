@@ -1,0 +1,15 @@
+{
+  "installCommand": "npm ci --prefix web",
+  "buildCommand": "npm run build --prefix web && node scripts/build-makers.mjs",
+  "outputDirectory": "web/dist",
+  "nodeVersion": "22.11.0",
+  "rewrites": [{"source": "/*", "destination": "/index.html"}],
+  "headers": [
+    {"source": "/*", "headers": [
+      {"key": "Referrer-Policy", "value": "no-referrer"},
+      {"key": "X-Frame-Options", "value": "DENY"},
+      {"key": "X-Content-Type-Options", "value": "nosniff"}
+    ]},
+    {"source": "/api/*", "headers": [{"key":"Cache-Control", "value":"no-store"}]}
+  ]
+}
