@@ -761,7 +761,7 @@ function App() {
               {publicView ? "我也测这款" : "再测一次这款"}
             </button>
             <button className="quiet" onClick={home}>
-              查看四款测评
+              返回测评入口
             </button>
             {!publicView && result.share_url && (
               <button
