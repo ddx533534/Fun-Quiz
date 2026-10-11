@@ -1,4 +1,5 @@
 // Local-only Blob equivalent for browser checks; never used by the cloud entry.
+import { localBlobList } from './local-blob-list.mjs';
 import { createServer } from 'node:http';
 import { readFile, mkdir, writeFile, rename } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
@@ -17,6 +18,7 @@ catch (e) {
   await writeFile(secretsPath, JSON.stringify(secrets));
 }
 const store = {
+  list: localBlobList(folder),
   async get(key) {
     try { return JSON.parse(await readFile(resolve(folder, key + '.json'), 'utf8')); }
     catch (e) { if (e.code === 'ENOENT') return null; throw e; }

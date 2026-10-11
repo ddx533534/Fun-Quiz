@@ -12,6 +12,11 @@ const answers = option => Object.fromEntries(Array.from({ length: 24 }, (_, i) =
 function setup() {
   const data = new Map(); let now = 100000, failure;
   const store = {
+    async list({ prefix, cursor }) {
+      const keys = [...data.keys()].filter(key => key.startsWith(prefix)).sort();
+      const offset = Number(cursor || 0), end = offset + 2;
+      return { blobs: keys.slice(offset, end).map(key => ({ key })), cursor: end < keys.length ? String(end) : undefined };
+    },
     async get(key) { return structuredClone(data.get(key) || null); },
     async setJSON(key, value) {
       if (failure?.(key, value)) { failure = null; throw new Error('Injected storage failure'); }
@@ -198,4 +203,60 @@ test('deployment uses tracked Node catch-all and SDK, with no generated Python d
   const entry = await readFile('cloud-functions/api/[[default]].js', 'utf8');
   assert.match(entry, /onRequest/); assert.match(entry, /@edgeone\/pages-blob/);
   assert.ok(!entry.includes('DATABASE_URL'));
+});
+
+
+test('history authentication, pagination and metadata', async () => {
+  const h = setup(), b = await batch(h, 3), stranger = h.client();
+  await stranger.call('/session');
+  for (const path of ['/admin/batches', '/admin/batches/' + b.id + '/codes']) {
+    const response = await stranger.call(path);
+    assert.equal(response.status, 403); assert.ok(!JSON.stringify(response.data).includes(b.codes[0]));
+  }
+  await batch(h, 1); await batch(h, 2);
+  const first = await h.user.call('/admin/batches');
+  assert.equal(first.status, 200); assert.equal(first.data.batches.length, 2);
+  const second = await h.user.call('/admin/batches?cursor=' + first.data.next_cursor);
+  assert.equal(second.data.batches.length, 1); assert.equal(second.data.next_cursor, null);
+  const all = [...first.data.batches, ...second.data.batches];
+  assert.equal(new Set(all.map(row => row.id)).size, 3);
+  assert.deepEqual(all.map(row => row.count).sort(), [1, 2, 3]);
+  assert.ok(all.every(row => row.created === 100000 && row.ready && !row.encrypted));
+  assert.equal((await h.user.call('/admin/batches?cursor=' + 'x'.repeat(2049))).status, 422);
+});
+test('legacy batches remain viewable and exportable beyond 24 hours', async () => {
+  const h = setup(), b = await batch(h, 2);
+  delete h.data.get('batches/' + b.id).created;
+  h.advance(86401); await h.user.call('/session'); await h.user.call('/admin/login', 'POST', { key: adminKey });
+  const detail = await h.user.call('/admin/batches/' + b.id + '/codes');
+  assert.equal(detail.status, 200); assert.deepEqual(detail.data.codes.map(row => row.code), b.codes);
+  assert.equal(detail.data.batch.created, 100000);
+  assert.deepEqual(detail.data.summary, { total: 2, available: 2, exhausted: 0, used: 0 });
+  assert.equal((await h.user.call('/admin/batches/' + b.id + '/export')).status, 200);
+});
+test('code list reflects usage without mutating quota or exposing answers', async () => {
+  const h = setup(), b = await batch(h, 3);
+  for (const [code, products] of [[b.codes[0], ['past']], [b.codes[1], ['past', 'next', 'cat']]]) {
+    for (const product of products) {
+      const a = await start(h.user, code, product);
+      assert.equal((await h.user.call('/attempts/' + a.id + '/complete', 'POST', { answers: answers('D') })).status, 200);
+    }
+  }
+  const before = JSON.stringify([...h.data]);
+  const response = await h.user.call('/admin/batches/' + b.id + '/codes');
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.data.codes.map(({ used, remaining, status }) => ({ used, remaining, status })), [
+    { used: 1, remaining: 2, status: 'partial' }, { used: 3, remaining: 0, status: 'exhausted' }, { used: 0, remaining: 3, status: 'unused' },
+  ]);
+  assert.deepEqual(response.data.summary, { total: 3, available: 2, exhausted: 1, used: 4 });
+  assert.ok(!JSON.stringify(response.data).includes('answers')); assert.equal(JSON.stringify([...h.data]), before);
+  assert.equal((await h.user.call('/admin/batches/missing/codes')).status, 404);
+  h.data.get('batches/' + b.id).ready = false;
+  assert.equal((await h.user.call('/admin/batches/' + b.id + '/codes')).status, 409);
+});
+test('disabled and missing codes are excluded from availability', async () => {
+  const h = setup(), b = await batch(h, 2), keys = [...h.data.keys()].filter(key => key.startsWith('codes/'));
+  h.data.get(keys[0]).active = false; h.data.delete(keys[1]);
+  const response = await h.user.call('/admin/batches/' + b.id + '/codes');
+  assert.deepEqual(response.data.codes.map(row => row.status), ['disabled', 'missing']); assert.equal(response.data.summary.available, 0);
 });

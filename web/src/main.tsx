@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { apiUrl, siteUrl, readApiResponse } from "./api";
 import "./style.css";
+import Admin from "./Admin";
 
 type ProductId = "past" | "next" | "cat" | "end";
 type Question = {
@@ -188,11 +189,6 @@ function App() {
   const [poster, setPoster] = useState("");
   const [manualLink, setManualLink] = useState("");
   const [admin, setAdmin] = useState(false);
-  const [adminKey, setAdminKey] = useState("");
-  const [batch, setBatch] = useState<{ id: string; count: number } | null>(
-    null,
-  );
-  const batchRequest = useRef("");
   const product = products.find((p) => p.id === selected);
   const question = product?.questions[index];
   const notify = (message: string) => {
@@ -786,95 +782,7 @@ function App() {
         </main>
       )}
       {screen === "admin" && (
-        <main className="center">
-          <div className="entry-card">
-            <span className="eyebrow">小馆管理室</span>
-            <h1>测评码管理</h1>
-            {!admin ? (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  void run(async () => {
-                    await api("/admin/login", "POST", { key: adminKey });
-                    setAdminKey("");
-                    setAdmin(true);
-                  });
-                }}
-              >
-                <label htmlFor="admin-key">管理密钥</label>
-                <input
-                  id="admin-key"
-                  type="password"
-                  value={adminKey}
-                  onChange={(e) => setAdminKey(e.target.value)}
-                  autoComplete="current-password"
-                  required
-                />
-                <button disabled={busy} className="primary">
-                  登录管理端
-                </button>
-              </form>
-            ) : (
-              <>
-                <p>每个码四款通用，累计生成3次结果后用完。</p>
-                <button
-                  className="primary"
-                  disabled={busy}
-                  onClick={() =>
-                    void run(async () => {
-                      if (!batchRequest.current)
-                        batchRequest.current = crypto.randomUUID();
-                      setBatch(
-                        await api("/admin/batches", "POST", {
-                          count: 100,
-                          request_key: batchRequest.current,
-                        }),
-                      );
-                    })
-                  }
-                >
-                  {busy
-                    ? "生成中…"
-                    : batch
-                      ? "重新取得本批次"
-                      : "批量生成100个测评码"}
-                </button>
-                {batch && (
-                  <div className="batch">
-                    <b>已生成 {batch.count} 个测评码</b>
-                    <p>请在24小时内下载并妥善保管。重复点击不会重复生成。</p>
-                    <a
-                      className="secondary"
-                      href={apiUrl("/admin/batches/" + batch.id + "/export")}
-                    >
-                      下载测评码 CSV
-                    </a>
-                    <button
-                      className="quiet"
-                      onClick={() => {
-                        batchRequest.current = "";
-                        setBatch(null);
-                      }}
-                    >
-                      创建另一个批次
-                    </button>
-                  </div>
-                )}
-                <button
-                  className="quiet"
-                  onClick={() =>
-                    void run(async () => {
-                      await api("/admin/logout", "POST");
-                      setAdmin(false);
-                    })
-                  }
-                >
-                  退出管理端
-                </button>
-              </>
-            )}
-          </div>
-        </main>
+        <Admin request={api} admin={admin} setAdmin={setAdmin} onError={setError} notify={notify} />
       )}
       <footer>
         <span>灵魂小馆 · 给每一种自己留个位子</span>

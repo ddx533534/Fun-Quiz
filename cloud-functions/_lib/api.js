@@ -210,6 +210,42 @@ export function createApi({ store, secret, adminKey, publicOrigin, production = 
       const user = await visitor(request); user.admin_until = 0;
       await put('sessions/' + user.id, user); return { ok: true };
     }
+    if (method === 'GET' && path === '/api/admin/batches') {
+      await visitor(request, true);
+      const cursor = url.searchParams.get('cursor') || undefined;
+      if (cursor && cursor.length > 2048) fail(422, '分页参数不正确');
+      const listing = await store.list({ prefix: 'batches/', paginate: false, cursor, consistency: 'strong' });
+      const batches = [];
+      for (let i = 0; i < listing.blobs.length; i += 10) {
+        const part = await Promise.all(listing.blobs.slice(i, i + 10).map(async item => {
+          const b = await get(item.key);
+          return b ? { id: b.id, count: b.count, ready: !!b.ready, created: b.created ?? b.expires - 86400 } : null;
+        }));
+        batches.push(...part.filter(Boolean));
+      }
+      batches.sort((a, b) => b.created - a.created || a.id.localeCompare(b.id));
+      return { batches, next_cursor: listing.cursor || null };
+    }
+    const batchCodesMatch = /^\/api\/admin\/batches\/([a-zA-Z0-9_-]+)\/codes$/.exec(path);
+    if (method === 'GET' && batchCodesMatch) {
+      await visitor(request, true);
+      const batch = await get('batches/' + batchCodesMatch[1]);
+      if (!batch) fail(404, '未找到这个批次');
+      if (!batch.ready) fail(409, '这个批次尚未完成，请使用原生成请求重试');
+      const values = JSON.parse(decrypt(batch.encrypted)), codes = [];
+      for (let i = 0; i < values.length; i += 10) {
+        codes.push(...await Promise.all(values.slice(i, i + 10).map(async value => {
+          const code = await get('codes/' + digest('code:' + value.replaceAll('-', '')));
+          const used = code ? Object.keys(code.completed).length : 0;
+          const left = code ? remaining(code) : 0;
+          const status = !code ? 'missing' : !code.active ? 'disabled' : !left ? 'exhausted' : used ? 'partial' : 'unused';
+          return { code: value, used, remaining: left, status };
+        })));
+      }
+      return { batch: { id: batch.id, count: batch.count, created: batch.created ?? batch.expires - 86400 }, codes,
+        summary: { total: codes.length, available: codes.filter(c => ['unused', 'partial'].includes(c.status)).length,
+          exhausted: codes.filter(c => c.status === 'exhausted').length, used: codes.reduce((sum, c) => sum + c.used, 0) } };
+    }
     if (method === 'POST' && path === '/api/admin/batches') {
       await visitor(request, true);
       const count = body.count ?? 100;
@@ -224,7 +260,7 @@ export function createApi({ store, secret, adminKey, publicOrigin, production = 
           const raw = Array.from(bytes.subarray(0, 16), byte => alphabet[byte & 31]).join('');
           return raw.match(/.{4}/g).join('-');
         });
-        batch = { id, count, encrypted: encrypt(JSON.stringify(codes)), expires: clock() + 86400, ready: false };
+        batch = { id, count, encrypted: encrypt(JSON.stringify(codes)), created: clock(), expires: clock() + 86400, ready: false };
         await put(key, batch);
       }
       if (!batch.ready) {
@@ -244,7 +280,7 @@ export function createApi({ store, secret, adminKey, publicOrigin, production = 
     if (method === 'GET' && exportMatch) {
       await visitor(request, true);
       const batch = await get('batches/' + exportMatch[1]);
-      if (!batch?.ready || batch.expires <= clock()) fail(410, '批次明文导出已过期，请妥善保管已下载文件');
+      if (!batch?.ready) fail(404, '未找到可导出的批次');
       const codes = JSON.parse(decrypt(batch.encrypted));
       return new Response('\ufeff测评码,测评,可用次数\r\n' + codes.map(c => c + ',四款通用（合计3次）,3\r\n').join(''), {
         headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="quiz-codes-all-${batch.id}.csv"` },

@@ -32,6 +32,24 @@ const rows = csv.trim().split(/\r?\n/);
 assert.equal(rows.length, 101);
 const code = rows[1].split(",")[0];
 assert.equal(new Set(rows.slice(1).map((r) => r.split(",")[0])).size, 100);
+await page.locator('.admin-table tbody tr').first().waitFor();
+assert.equal(await page.locator('.admin-table tbody tr').count(), 25);
+assert.equal(await page.locator('.admin-table tbody tr').first().getAttribute('data-code'), code);
+await page.getByRole('button', { name: '下一页', exact: true }).click();
+assert.notEqual(await page.locator('.admin-table tbody tr').first().getAttribute('data-code'), code);
+await page.getByRole('button', { name: '上一页', exact: true }).click();
+await page.getByLabel('搜索测评码').fill(code.replaceAll('-', '').toLowerCase());
+assert.equal(await page.locator('.admin-table tbody tr').count(), 1);
+await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+await page.getByRole('button', { name: '复制', exact: true }).click();
+assert.equal(await page.evaluate(() => navigator.clipboard.readText()), code);
+await page.reload(); await page.locator('.admin-table tbody tr').first().waitFor();
+assert.equal(await page.getByRole('link', { name: '下载测评码 CSV' }).getAttribute('href'), url);
+assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+await page.screenshot({ path: '../test-artifacts/admin-mobile.png', fullPage: true });
+await page.setViewportSize({ width: 1365, height: 900 });
+await page.screenshot({ path: '../test-artifacts/admin-desktop.png', fullPage: true });
+await page.setViewportSize({ width: 390, height: 844 });
 for (const [id, title] of [
   ["past", "你的上一世是什么？"],
   ["next", "你的下一世是什么？"],
@@ -195,6 +213,15 @@ await page
   .getByRole("alert")
   .getByText("这个测评码的三次机会已经用完")
   .waitFor();
+await page.goto(origin + '/admin'); await page.locator('.admin-table tbody tr').first().waitFor();
+await page.getByLabel('搜索测评码').fill(code);
+await page.getByLabel('使用状态').selectOption('exhausted');
+const usedRow = page.locator('.admin-table tbody tr');
+assert.equal(await usedRow.count(), 1);
+assert.equal(await usedRow.locator('td').nth(1).textContent(), '3 次');
+assert.equal(await usedRow.locator('td').nth(2).textContent(), '0 次');
+await page.getByRole('button', { name: '退出管理端' }).click();
+await page.getByLabel('管理密钥').waitFor(); assert.equal(await page.locator('.admin-table').count(), 0);
 const desktop = await browser.newContext({
   viewport: { width: 1365, height: 900 },
 });

@@ -749,3 +749,62 @@ footer {
     display: none;
   }
 }
+
+/* Admin inventory: independent from the single-product customer entry. */
+.admin-page { max-width: 1260px; margin: 44px auto 70px; padding: 0 24px; }
+.admin-heading, .admin-panel-heading, .admin-create { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+.admin-heading h1 { font-size: 34px; margin: 8px 0; }
+.admin-heading p, .admin-create p, .admin-panel-heading p { color: #7b8476; font-size: 13px; margin: 4px 0; }
+.admin-actions { display: flex; gap: 10px; }
+.admin-page .primary, .admin-page .secondary { width: auto; white-space: nowrap; margin: 0; padding: 11px 18px; font-size: 13px; }
+.admin-create { margin: 24px 0 18px; padding: 22px 26px; background: #e9ede2; border: 1px solid #d8dfce; border-radius: 15px; }
+.admin-success { padding: 10px 16px; border-radius: 10px; margin-bottom: 16px; background: #e3eddf; color: #476653; font-size: 14px; }
+.admin-layout { display: grid; grid-template-columns: 235px minmax(0, 1fr); gap: 20px; }
+.admin-batches, .admin-codes { background: var(--paper); border: 1px solid #e1e3d8; border-radius: 15px; padding: 22px; min-width: 0; }
+.admin-batches { max-height: 920px; overflow-y: auto; }
+.admin-page h2 { font-size: 17px; margin: 0 0 14px; }
+.admin-batches h2 small { color: #8c9786; font-weight: 400; margin-left: 8px; }
+.admin-batch { display: block; text-align: left; width: 100%; background: transparent; border: 1px solid #e0e3d8; border-radius: 10px; padding: 13px 12px; margin-bottom: 10px; color: inherit; }
+.admin-batch strong { font-size: 12px; }
+.admin-batch span, .admin-batch small { display: block; font-size: 12px; color: #7d8776; }
+.admin-batch small { font-size: 10px; margin-top: 5px; }
+.admin-batch.selected { background: #eef2e8; border-color: #7c9879; }
+.admin-panel-heading { margin-bottom: 20px; }
+.admin-panel-heading h2 { margin: 0; }
+.admin-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 23px; }
+.admin-stats div { background: #f5f5ef; padding: 13px; border-radius: 10px; }
+.admin-stats span { display: block; font-size: 11px; color: #7a8574; }
+.admin-stats strong { display: block; font-size: 27px; font-weight: 500; }
+.admin-filters { display: flex; align-items: end; gap: 12px; }
+.admin-filters label { font-size: 12px; flex: 1; min-width: 0; }
+.admin-filters label:first-child { flex: 2; }
+.admin-filters span { display: block; margin-bottom: 6px; }
+.admin-filters input, .admin-filters select { width: 100%; min-width: 0; padding: 10px; border: 1px solid #dce1d2; border-radius: 8px; background: #fffdf8; color: inherit; font-size: 12px; }
+.admin-count { font-size: 12px; color: #818b79; margin: 16px 0 10px; }
+.admin-table-scroll { overflow-x: auto; }
+.admin-table { border-collapse: collapse; width: 100%; text-align: left; font-size: 12px; white-space: nowrap; }
+.admin-table th { color: #828b7b; font-weight: 400; padding: 12px 10px; background: #f3f5ed; }
+.admin-table td { padding: 10px; border-bottom: 1px solid #edf0e5; }
+.admin-table code { font-family: ui-monospace, Consolas, monospace; font-size: 13px; letter-spacing: .3px; }
+.admin-table .quiet { padding: 5px 8px; color: #476653; }
+.code-status { padding: 4px 8px; border-radius: 20px; font-size: 11px; background: #eceee6; }
+.code-status.unused { background: #e7efdf; color: #476653; }
+.code-status.partial { background: #faf0d9; color: #9a7829; }
+.code-status.exhausted, .code-status.disabled, .code-status.missing { color: #8d8178; }
+.admin-pagination { display: flex; justify-content: space-between; align-items: center; margin-top: 18px; font-size: 12px; }
+.admin-empty { text-align: center; padding: 40px 10px; color: #929b86; font-size: 13px; }
+.admin-manual-copy { display: block; margin-top: 20px; font-size: 12px; }
+.admin-manual-copy textarea { width: 100%; padding: 12px; margin-top: 8px; border: 1px solid #dce1d2; border-radius: 8px; }
+@media (max-width: 760px) {
+  .admin-page { padding: 0 16px; margin-top: 25px; }
+  .admin-heading, .admin-create, .admin-panel-heading { align-items: flex-start; flex-direction: column; gap: 12px; }
+  .admin-heading h1 { font-size: 28px; }
+  .admin-create { padding: 18px; }
+  .admin-layout { grid-template-columns: minmax(0, 1fr); }
+  .admin-batches { max-height: 245px; padding: 16px; }
+  .admin-codes { padding: 16px; }
+  .admin-stats { grid-template-columns: repeat(2, 1fr); }
+  .admin-filters { flex-wrap: wrap; }
+  .admin-filters label:first-child { flex-basis: 100%; }
+  .admin-pagination .secondary { padding: 9px 12px; }
+}
