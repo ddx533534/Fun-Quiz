@@ -1,24 +1,17 @@
-"""Verify the prefix adapter locally; platform deployment remains an integration check."""
-import importlib.util
+"""Check active Node Blob build artifacts; actual cloud integration remains separate."""
+import json
 import subprocess
-import sys
 from pathlib import Path
-from fastapi.testclient import TestClient
 
 
-def test_makers_asgi_routing():
-    root=Path(__file__).parents[1]
-    subprocess.run(['node','scripts/build-makers.mjs'],cwd=root,check=True)
-    sys.path.insert(0,str(root/'cloud-functions'))
-    try:
-        spec=importlib.util.spec_from_file_location('makers_entry',root/'cloud-functions/api/index.py')
-        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-        c=TestClient(module.app)
-        assert c.get('/health').status_code==200
-        catalog=c.get('/catalog').json()
-        assert len(catalog['products'])==4
-        session=c.get('/session').json()
-        c.headers.update({'Origin':'http://testserver','X-CSRF-Token':session['csrf']})
-        assert c.post('/admin/login',json={'key':'test-admin-key-'+'b'*40}).status_code==200
-    finally:
-        sys.path.remove(str(root/'cloud-functions'))
+def test_makers_node_bundle():
+    root = Path(__file__).parents[1]
+    subprocess.run(['node', 'scripts/build-makers.mjs'], cwd=root, check=True)
+    entry = root / 'cloud-functions/api/[[default]].js'
+    assert entry.exists()
+    assert '@edgeone/pages-blob' in entry.read_text('utf-8')
+    assert not (root / 'cloud-functions/api/index.py').exists()
+    config = json.loads((root / 'edgeone.json').read_text('utf-8'))
+    assert config['buildCommand'] == 'npm run build'
+    subprocess.run(['node', '--input-type=module', '-e',
+        "import('./cloud-functions/_lib/generator.js').then(m => { if (m.catalog().products.length !== 4) process.exit(1); })"], cwd=root, check=True)

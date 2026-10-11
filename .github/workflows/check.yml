@@ -29,7 +29,8 @@ jobs:
       - run: python -m pytest tests -q
         env:
           TEST_DATABASE_URL: postgresql+psycopg://postgres:test-only-password@127.0.0.1:5432/quiz_test
-      - run: npm ci && npm run build
+      - run: npm ci
+      - run: npm ci
         working-directory: web
-      - run: node e2e/api-response.test.mjs
-        working-directory: web
+      - run: npm run build
+      - run: npm test

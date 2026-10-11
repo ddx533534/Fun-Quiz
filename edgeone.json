@@ -1,6 +1,6 @@
 {
-  "installCommand": "npm ci --prefix web",
-  "buildCommand": "npm run build --prefix web && node scripts/build-makers.mjs",
+  "installCommand": "npm ci && npm ci --prefix web",
+  "buildCommand": "npm run build",
   "outputDirectory": "web/dist",
   "nodeVersion": "22.11.0",
   "rewrites": [{"source": "/*", "destination": "/index.html"}],

@@ -1,0 +1,11 @@
+{
+  "name": "fun-quiz-makers",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-makers.mjs && npm run build --prefix web",
+    "test": "node --test tests/blob.test.mjs && node web/e2e/api-response.test.mjs",
+    "dev": "node scripts/dev-blob.mjs"
+  },
+  "dependencies": { "@edgeone/pages-blob": "0.0.18" }
+}

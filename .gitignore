@@ -18,4 +18,10 @@ supabase-vendor/
 .npm-cache/
 .tools/
 *.tsbuildinfo
-cloud-functions/
+# Previous Python bundle is not part of the active Makers deployment.
+cloud-functions/quiz_api.py
+cloud-functions/api/index.py
+cloud-functions/engine/
+cloud-functions/content/
+cloud-functions/requirements.txt
+.blob-local/
