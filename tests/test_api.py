@@ -22,9 +22,9 @@ def client():
     return c
 
 
-def batch(c, product='past', count=100, key='test-batch-key-123456'):
+def batch(c, count=100, key='test-batch-key-123456'):
     assert c.post('/api/admin/login', json={'key':ADMIN_KEY}).status_code == 200
-    response = c.post('/api/admin/batches', json={'product':product,'count':count,'request_key':key})
+    response = c.post('/api/admin/batches', json={'count':count,'request_key':key})
     assert response.status_code == 200, response.text
     bid = response.json()['id']
     export = c.get('/api/admin/batches/'+bid+'/export')
@@ -36,7 +36,7 @@ def batch(c, product='past', count=100, key='test-batch-key-123456'):
 def start(c, code, product='past'):
     r = c.post('/api/codes/verify',json={'code':code,'product':product})
     assert r.status_code == 200, r.text
-    r = c.post('/api/attempts',json={'grant_id':r.json()['grant_id']})
+    r = c.post('/api/attempts',json={'grant_id':r.json()['grant_id'],'product':product})
     assert r.status_code == 200, r.text
     return r.json()['id']
 
@@ -82,7 +82,8 @@ def test_three_uses_and_retry():
 
 def test_code_binding_and_ownership():
     c=client();_,codes=batch(c,count=1)
-    assert c.post('/api/codes/verify',json={'code':codes[0],'product':'cat'}).status_code==400
+    assert c.post('/api/codes/verify',json={'code':codes[0],'product':'cat'}).status_code==200
+    assert c.post('/api/codes/verify',json={'code':codes[0],'product':'unknown'}).status_code==422
     aid=start(c,codes[0]);other=client()
     assert other.get('/api/attempts/'+aid).status_code==404
     assert complete(other,aid).status_code==404
@@ -152,15 +153,43 @@ def test_duplicate_submit_concurrent():
 def test_hold_concurrency_and_complete():
     c=client();_,codes=batch(c,count=1)
     clients=[client() for _ in range(8)]
-    grants=[cc.post('/api/codes/verify',json={'code':codes[0],'product':'past'}).json()['grant_id'] for cc in clients]
+    products=['past','next','cat','end']*2
+    grants=[cc.post('/api/codes/verify',json={'code':codes[0],'product':product}).json()['grant_id'] for cc,product in zip(clients,products)]
     with ThreadPoolExecutor(max_workers=8) as pool:
-        rows=list(pool.map(lambda pair:pair[0].post('/api/attempts',json={'grant_id':pair[1]}),zip(clients,grants)))
+        rows=list(pool.map(lambda pair:pair[0].post('/api/attempts',json={'grant_id':pair[1],'product':pair[2]}),zip(clients,grants,products)))
     assert sum(r.status_code==200 for r in rows)==3
     winners=[(cc,r.json()['id']) for cc,r in zip(clients,rows) if r.status_code==200]
     with ThreadPoolExecutor(max_workers=3) as pool:
         results=list(pool.map(lambda pair:complete(*pair),winners))
     assert all(r.status_code==200 for r in results)
     assert counts()==(3,3,3)
+
+
+def test_one_code_shares_three_uses_across_products():
+    c=client();_,codes=batch(c,count=1)
+    for product,remaining in [('past',2),('next',1),('cat',0)]:
+        aid=start(c,codes[0],product)
+        assert c.get('/api/attempts/'+aid).json()['product']==product
+        r=complete(c,aid)
+        assert r.status_code==200 and r.json()['remaining']==remaining
+        report=c.get('/api/results/'+r.json()['result_id']).json()['report']
+        assert report['product']==product
+        assert complete(c,aid).json()==r.json()
+    assert c.post('/api/codes/verify',json={'code':codes[0],'product':'end'}).status_code==409
+    assert counts()==(3,3,3)
+
+
+def test_same_visitor_can_hold_different_products_without_mixing_drafts():
+    c=client();_,codes=batch(c,count=1)
+    ids=[start(c,codes[0],product) for product in ('past','next','cat')]
+    assert len(set(ids))==3
+    assert start(c,codes[0],'past')==ids[0]
+    for aid,key in zip(ids,('A','B','C')):
+        assert c.patch('/api/attempts/'+aid,json={'answers':{'Q01':key},'revision':0}).status_code==200
+    assert [c.get('/api/attempts/'+aid).json()['answers'] for aid in ids]==[{'Q01':key} for key in ('A','B','C')]
+    grant=c.post('/api/codes/verify',json={'code':codes[0],'product':'end'}).json()['grant_id']
+    assert c.post('/api/attempts',json={'grant_id':grant,'product':'end'}).status_code==409
+    assert counts()==(0,0,0)
 
 
 def test_transaction_rolls_back_insert_failure():

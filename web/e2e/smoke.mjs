@@ -145,6 +145,53 @@ const privateResponse = await stranger.request.get(
   origin + "/api/results/" + resultId,
 );
 assert.equal(privateResponse.status(), 404);
+// The same code can enter other products, but all products share its three uses.
+for (const [product, remaining] of [
+  ["next", 1],
+  ["end", 0],
+]) {
+  await page.goto(origin + "/quiz/" + product);
+  await page.getByLabel("测评码", { exact: true }).fill(code);
+  await page.getByRole("button", { name: "解锁我的档案" }).click();
+  await page.getByRole("button", { name: "开始测评" }).click();
+  await page.getByText("生活片段 01", { exact: true }).waitFor();
+  const aid = await page.evaluate(
+    (id) => sessionStorage.getItem("quiz-attempt:" + id),
+    product,
+  );
+  const session = await (
+    await context.request.get(origin + "/api/session")
+  ).json();
+  const completion = await context.request.post(
+    origin + "/api/attempts/" + aid + "/complete",
+    {
+      headers: { Origin: origin, "X-CSRF-Token": session.csrf },
+      data: {
+        answers: Object.fromEntries(
+          Array.from({ length: 24 }, (_, i) => [
+            "Q" + String(i + 1).padStart(2, "0"),
+            "D",
+          ]),
+        ),
+      },
+    },
+  );
+  assert.equal(completion.status(), 200);
+  assert.equal((await completion.json()).remaining, remaining);
+  await page.reload();
+  await page.locator(".dossier").first().waitFor();
+  assert.equal(
+    new URL(page.url()).pathname.startsWith("/quiz/" + product + "/result/"),
+    true,
+  );
+}
+await page.goto(origin + "/quiz/cat");
+await page.getByLabel("测评码", { exact: true }).fill(code);
+await page.getByRole("button", { name: "解锁我的档案" }).click();
+await page
+  .getByRole("alert")
+  .getByText("这个测评码的三次机会已经用完")
+  .waitFor();
 const desktop = await browser.newContext({
   viewport: { width: 1365, height: 900 },
 });
@@ -158,5 +205,5 @@ await desktopPage.screenshot({
 assert.deepEqual(errors, []);
 await browser.close();
 console.log(
-  "PASS: four direct entries and reload, separate product progress, product result route, mobile navigation, 100 unique codes, 24 questions, back/edit, PNG, anonymous sharing, private ownership, desktop rendering.",
+  "PASS: four entries, separate progress, universal code across products with a shared 3-use limit, 100 unique codes, mobile flow, PNG, anonymous sharing, private ownership, desktop rendering.",
 );

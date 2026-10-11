@@ -194,7 +194,6 @@ function App() {
     null,
   );
   const batchRequest = useRef("");
-  const [batchProduct, setBatchProduct] = useState<ProductId>("past");
   const product = products.find((p) => p.id === selected);
   const question = product?.questions[index];
   const notify = (message: string) => {
@@ -351,7 +350,10 @@ function App() {
   }
   function start() {
     void run(async () => {
-      const data = await api<Attempt>("/attempts", "POST", { grant_id: grant });
+      const data = await api<Attempt>("/attempts", "POST", {
+        grant_id: grant,
+        product: selected,
+      });
       setAttempt(data);
       sessionStorage.setItem("quiz-attempt:" + data.product, data.id);
       setIndex(Math.min(Object.keys(data.answers).length, 23));
@@ -614,7 +616,7 @@ function App() {
             <span className="eyebrow">你的故事，从这里开始</span>
             <h1>{meta[selected].title}</h1>
             <p>
-              请输入这款测评的专属测评码。
+              请输入通用测评码，四款测评都可以使用。
               <br />
               每个码有3次完整测评机会，生成结果后才扣次。
             </p>
@@ -639,7 +641,7 @@ function App() {
                 {busy ? "正在验证…" : "解锁我的档案 →"}
               </button>
             </form>
-            <small>测评码只对应一款测评，请选择购买时的款式。</small>
+            <small>四款共享3次机会，可测不同款，也可重复测同一款。</small>
           </div>
         </main>
       )}
@@ -647,7 +649,9 @@ function App() {
         <main className="center">
           <div className="entry-card">
             <Glyph kind={selected} />
-            <span className="eyebrow">档案已解锁 · 剩余 {remaining} 次</span>
+            <span className="eyebrow">
+              档案已解锁 · 四款共剩 {remaining} 次
+            </span>
             <h1>把真实的你带进来。</h1>
             <p>
               请选择最接近你平常反应的答案。
@@ -853,23 +857,7 @@ function App() {
               </form>
             ) : (
               <>
-                <p>一个批次对应一款测评。每个码可生成3次结果。</p>
-                <label htmlFor="batch-product">选择测评</label>
-                <select
-                  id="batch-product"
-                  value={batchProduct}
-                  onChange={(e) => {
-                    setBatchProduct(e.target.value as ProductId);
-                    batchRequest.current = "";
-                    setBatch(null);
-                  }}
-                >
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
+                <p>每个码四款通用，累计生成3次结果后用完。</p>
                 <button
                   className="primary"
                   disabled={busy}
@@ -879,7 +867,6 @@ function App() {
                         batchRequest.current = crypto.randomUUID();
                       setBatch(
                         await api("/admin/batches", "POST", {
-                          product: batchProduct,
                           count: 100,
                           request_key: batchRequest.current,
                         }),

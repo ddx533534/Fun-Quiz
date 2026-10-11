@@ -79,6 +79,7 @@ class Attempt(Base):
     id = Column(String(36), primary_key=True)
     visitor = Column(String(64), nullable=False)
     code = Column(String(36), nullable=False, index=True)
+    product = Column(String(8), nullable=False)
     created = Column(Float, nullable=False)
     expires = Column(Float, nullable=False)
     answers = Column(JSON, default=dict, nullable=False)
@@ -204,7 +205,7 @@ def owned_attempt(db, request, attempt_id):
 
 
 def attempt_view(a, c):
-    return {'id': a.id, 'product': c.product, 'answers': a.answers, 'revision': a.revision, 'result_id': a.result, 'remaining': 3 - c.used, 'expires': a.expires}
+    return {'id': a.id, 'product': a.product, 'answers': a.answers, 'revision': a.revision, 'result_id': a.result, 'remaining': 3 - c.used, 'expires': a.expires}
 
 
 def public_report(report):
@@ -261,6 +262,8 @@ class VerifyBody(BaseModel):
 
 @app.post('/api/codes/verify')
 def verify(body: VerifyBody, request: Request):
+    if body.product not in LIB['products']:
+        fail(422, '未知测评')
     denied = None
     with transaction() as db:
         user = visitor(db, request)
@@ -270,8 +273,8 @@ def verify(body: VerifyBody, request: Request):
         else:
             clean = body.code.replace('-', '').replace(' ', '').upper()
             row = db.scalar(select(Code).where(Code.digest == digest('code:' + clean)).with_for_update())
-            if not row or not row.active or row.product != body.product:
-                denied = (400, '测评码不正确，或不属于这款测评')
+            if not row or not row.active:
+                denied = (400, '测评码不正确或已停用')
             elif row.used >= 3:
                 denied = (409, '这个测评码的三次机会已经用完')
             else:
@@ -279,7 +282,7 @@ def verify(body: VerifyBody, request: Request):
                 if not grant:
                     grant = Grant(id=uid(), visitor=user.id, code=row.id)
                     db.add(grant)
-                result = {'grant_id': grant.id, 'remaining': 3 - row.used, 'product': row.product}
+                result = {'grant_id': grant.id, 'remaining': 3 - row.used, 'product': body.product}
     if denied:
         fail(*denied)
     return result
@@ -287,10 +290,13 @@ def verify(body: VerifyBody, request: Request):
 
 class StartBody(BaseModel):
     grant_id: str = Field(max_length=36)
+    product: str = Field(max_length=8)
 
 
 @app.post('/api/attempts')
 def start(body: StartBody, request: Request):
+    if body.product not in LIB['products']:
+        fail(422, '未知测评')
     with transaction() as db:
         user = visitor(db, request)
         grant = db.get(Grant, body.grant_id)
@@ -300,11 +306,11 @@ def start(body: StartBody, request: Request):
         now = time.time()
         attempts = list(db.scalars(select(Attempt).where(Attempt.code == code.id, Attempt.result.is_(None), Attempt.expires > now)))
         for attempt in attempts:
-            if attempt.visitor == user.id:
+            if attempt.visitor == user.id and attempt.product == body.product:
                 return attempt_view(attempt, code)
         if code.used + len(attempts) >= 3:
             fail(409, '机会已用完或有其他设备正在测评，请稍后重试')
-        a = Attempt(id=uid(), visitor=user.id, code=code.id, created=now, expires=now+3600, answers={}, revision=0)
+        a = Attempt(id=uid(), visitor=user.id, code=code.id, product=body.product, created=now, expires=now+3600, answers={}, revision=0)
         db.add(a)
         return attempt_view(a, code)
 
@@ -347,7 +353,7 @@ def complete(attempt_id: str, body: CompleteBody, request: Request):
     with transaction() as db:
         user, code, a = owned_attempt(db, request, attempt_id)
         try:
-            report = generate(code.product, body.answers)
+            report = generate(a.product, body.answers)
         except ValueError as exc:
             fail(422, str(exc))
         if a.result:
@@ -427,22 +433,19 @@ def admin_logout(request: Request):
 
 
 class BatchBody(BaseModel):
-    product: str = Field(max_length=8)
     count: int = Field(default=100, ge=1, le=100)
     request_key: str = Field(min_length=16, max_length=80)
 
 
 @app.post('/api/admin/batches')
 def create_batch(body: BatchBody, request: Request):
-    if body.product not in LIB['products']:
-        fail(422, '未知测评')
     with transaction() as db:
         visitor(db, request, True)
         if engine.dialect.name == 'postgresql':
             db.execute(text('SELECT pg_advisory_xact_lock(:key)'), {'key': int(digest('batch:'+body.request_key)[:15],16)})
         old = db.scalar(select(Batch).where(Batch.request_key == body.request_key))
         if old:
-            if old.product != body.product or old.count != body.count:
+            if old.count != body.count:
                 fail(409, '请求编号已用于其他批次')
             return {'id': old.id, 'count': old.count, 'expires': old.expires}
         codes = []
@@ -450,8 +453,8 @@ def create_batch(body: BatchBody, request: Request):
         for _ in range(body.count):
             raw = ''.join(secrets.choice(alphabet) for _ in range(16))
             codes.append('-'.join(raw[i:i+4] for i in range(0,16,4)))
-            db.add(Code(id=uid(), digest=digest('code:'+raw), product=body.product, used=0, active=True))
-        batch = Batch(id=uid(), request_key=body.request_key, product=body.product, count=body.count, encrypted=encrypt(json.dumps(codes)), expires=time.time()+86400)
+            db.add(Code(id=uid(), digest=digest('code:'+raw), product='all', used=0, active=True))
+        batch = Batch(id=uid(), request_key=body.request_key, product='all', count=body.count, encrypted=encrypt(json.dumps(codes)), expires=time.time()+86400)
         db.add(batch)
         return {'id': batch.id, 'count': batch.count, 'expires': batch.expires}
 
@@ -467,8 +470,8 @@ def export(batch_id: str, request: Request):
         writer = csv.writer(stream)
         writer.writerow(['测评码','测评','可用次数'])
         for code in json.loads(decrypt(row.encrypted)):
-            writer.writerow([code, LIB['products'][row.product]['name'], 3])
-        return Response(content=('\ufeff'+stream.getvalue()).encode('utf-8'), media_type='text/csv', headers={'Content-Disposition': f'attachment; filename="quiz-codes-{row.product}-{row.id}.csv"'})
+            writer.writerow([code, '四款通用（合计3次）', 3])
+        return Response(content=('\ufeff'+stream.getvalue()).encode('utf-8'), media_type='text/csv', headers={'Content-Disposition': f'attachment; filename="quiz-codes-all-{row.id}.csv"'})
 
 
 DIST = ROOT / 'web/dist'
