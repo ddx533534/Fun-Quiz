@@ -8,16 +8,17 @@
 | 你的下一世是什么？ | `/quiz/next` |
 | 你是哪一种流浪猫？ | `/quiz/cat` |
 | 末世来临，你会变成什么动物？ | `/quiz/end` |
+| JEV 帮你选 | `/jev` |
 
-默认访问根路径 `/` 会进入 `/quiz/past`（上一世），不显示四卡片导航页；另外三款仍可通过独立地址直接访问。
+默认访问根路径 `/` 显示五个产品的导航页，四款测评与 JEV 均可通过各自的独立地址直接访问。
 
 每款24题，32种基础身份、96种固定变体。同一产品、同一答案、同一版本生成相同的结果内容；会话、时间、测评码不影响文学身份。问卷是趣味自我探索，未经心理测量验证。
 
 ## 当前部署：Makers + Blob
 
-线上入口是 `cloud-functions/api/[[default]].js`，使用 Node.js 云函数与 `@edgeone/pages-blob@0.0.18`。测评码、会话、草稿、结果、分享索引与批次均保存到 Makers 的 `fun-quiz-v1` Blob 命名空间。**不再需要 Supabase、DATABASE_URL 或数据库迁移。**
+线上入口是 `cloud-functions/api/[[default]].js`，使用 Node.js 云函数与 `@edgeone/pages-blob@0.0.18`。通用测评码、会话、草稿、测评与 JEV 结果、分享索引与批次均保存到 Makers 的 `fun-quiz-v1` Blob 命名空间。**不再需要 Supabase、DATABASE_URL 或数据库迁移。**
 
-按用户2026-10-11确认，接受 Blob 并发读改写带来的次数偏差。四款共用每码3次额度，普通顺序使用时成功保存结果后计1次；验证、回退、刷新、查看、分享和图片保存不扣次。并发提交可能超额、丢失额度更新或覆盖草稿；不能宣称分布式事务或严格并发3次上限。SDK的强一致读取仅降低缓存陈旧，不提供锁或条件更新。
+按用户2026-10-11确认，接受 Blob 并发读改写带来的次数偏差。四款测评与 JEV 共用每码3次额度，普通顺序使用时成功保存结果后计1次；验证、回退、刷新、查看、分享和图片保存不扣次。并发提交可能超额、丢失额度更新或覆盖草稿；不能宣称分布式事务或严格并发3次上限。SDK的强一致读取仅降低缓存陈旧，不提供锁或条件更新。
 
 成功结果另有独立快照，避免后续码对象覆盖使已发布结果丢失。普通重复提交读取原结果；提交失败可在原测评重试。批量生成100码支持同请求编号继续初始化，不重置已存在码。Blob没有跨对象事务；发生网络应答丢失时可能已保存，不能仅凭错误提示判断未扣次。
 
@@ -25,19 +26,19 @@
 
 导入 GitHub 仓库 `ddx533534/Fun-Quiz`，根目录选仓库根目录，使用 `edgeone.json`：
 
-- 安装：`npm ci && npm ci --prefix web`
+- 安装：`npm ci && npm ci --prefix web && npm ci --prefix jev`
 - 构建：`npm run build`
 - 静态输出：`web/dist`
 - Node：22.11.0
 - API：Node.js 云函数 `/api/*`，源码已提交，不依赖构建后才发现函数。
 - 无备案域名：加速区域选“全球可用区（不含中国大陆）”。
 
-在平台**服务端环境变量**中仅配置以下三项：
+四款测评在平台**服务端环境变量**中配置以下三项：
 
 | 名称 | 要求 |
 | --- | --- |
 | `APP_SECRET` | 密码学随机生成，至少40字符，上线后保持不变 |
-| `ADMIN_KEY` | 密码学随机生成，至少32字符，用于 `/admin` 登录 |
+| `ADMIN_KEY` | 密码学随机生成，至少32字符，用于统一 `/admin` 登录 |
 | `PUBLIC_ORIGIN` | `https://quiz.moting.com.cn`，无尾部斜杠，须是你自己的最终站点地址 |
 
 `.env.example` 是模板，不是真实密钥。本机 `.env.production` 被Git忽略，如已生成可将里面的三项值复制到平台。不得加入 `VITE_` 前缀，不得提交密钥、用户数据或码CSV。修改平台变量后重新部署生产环境。
@@ -52,7 +53,7 @@
 - 会话HttpOnly/Secure/SameSite=Lax Cookie，写接口检查Origin与CSRF，管理权限1小时。
 - HMAC索引码和会话；批次导出与分享凭据使用AES-GCM加密。结果链接不可猜测。
 - 公共分享仅含文学结果，不包含答案、分数、证据、测评码或次数。拥有者可撤销。
-- `/admin` 批量生成100个通用码，CSV导出24小时可用。
+- `/admin` 批量生成100个四款测评与 JEV 通用码，CSV导出24小时可用。
 - 1080×1920 PNG在浏览器生成，可下载、系统分享或长按保存，无需上传图片。
 - 所有API响应禁用缓存；无第三方图片或字体请求。
 - 更换APP_SECRET会使旧码、会话、导出与分享凭据不可用。保留密钥与Blob数据备份。
@@ -64,6 +65,7 @@
 ```powershell
 npm ci
 npm ci --prefix web
+npm ci --prefix jev
 npm run build
 npm run dev
 ```
@@ -80,8 +82,20 @@ npm test
 $env:E2E_ORIGIN='http://127.0.0.1:8001'
 $env:E2E_BROWSER_PATH='C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'
 node e2e/smoke.mjs
+# JEV 浏览器测试（模拟外部决策响应，不调用付费服务）
+node e2e/jev-smoke.mjs
 ```
 
 Blob测试覆盖顺序3次额度、批次恢复、幂等重试、答题进度、所有权、分享投影与撤销、CSRF/Origin、限流、保存故障与快照恢复。580组答案逐项对照Python参考算法，覆盖96变体。浏览器测试覆盖四入口、手机/桌面、批量100码、回退修改、刷新恢复、PNG与匿名分享。
 
 `api/`、Python旧API测试、Docker/Caddy部署文件保留作为数据库版参考；它们不参与当前Makers部署。旧部署研究记录只反映历史方案，现行架构以本README及Node入口为准。Blob方案设计和已验证边界见 `docs/Makers-Blob替代数据库实施记录.md`。
+
+## JEV 帮你选
+
+从同级 `jev-product/edgeone` 迁入，独立前端位于 `jev/`，统一构建到 `web/dist/jev/`。访问 `/jev` 或 `/jev/`，保留原页面、要不要/选哪个、兑换码、次数恢复和结果展示。
+
+JEV 接口为 `/api/jev/redeem`、`/api/jev/credits`、`/api/jev/decide`，由现有 Makers Node 云函数处理。与四款测评共用 `fun-quiz-v1` Blob 命名空间、HttpOnly 会话、Origin/CSRF 检查和码验证限流。统一在 `/admin` 生成及导出通用码，现有16位通用码也可直接在 JEV 使用；每码在四款测评及 JEV 之间合计生成3次结果。验证、查看次数和相同请求重试不重复扣次。JEV 结果与使用记录在同一码对象中提交，独立快照用于恢复已完成结果。
+
+JEV 服务端配置 `TYPESAFE_API_KEY` 后重新部署。兑换码统一由 `/admin` 生成。本地真实决策需设置 `TYPESAFE_API_KEY` 后启动 `npm run dev`；本地数据统一写入 `.blob-local/`，不会访问云端。旧 JEV 的8位兑换码与浏览器 Bearer 会话不属于统一码方案，需要重新交付 `/admin` 导出的通用码；旧 Blob 数据不自动转换，原项目保持完整。
+
+JEV 决策请求携带请求编号，相同编号及输入重试返回原结果；失败或尚未确认的提交可在原页面重试。Blob 读改写不具备事务或严格并发额度保证，沿用现有项目已接受的并发边界。原项目、密钥与兑换码 CSV 未复制或修改。

@@ -173,8 +173,8 @@ function App() {
   const [products, setProducts] = useState<Product[]>([]);
   const [selected, setSelected] = useState<ProductId | null>(null);
   const [screen, setScreen] = useState<
-    "loading" | "code" | "ready" | "quiz" | "result" | "admin"
-  >("loading");
+    "home" | "loading" | "code" | "ready" | "quiz" | "result" | "admin"
+  >(location.pathname === "/" ? "home" : "loading");
   const [code, setCode] = useState("");
   const [grant, setGrant] = useState("");
   const [remaining, setRemaining] = useState(3);
@@ -249,10 +249,10 @@ function App() {
   }
   async function openPath() {
     setError("");
-    let path = location.pathname;
+    const path = location.pathname;
     if (path === "/") {
-      history.replaceState(null, "", siteUrl("/quiz/past"));
-      path = "/quiz/past";
+      home();
+      return;
     }
     const entry = path.match(/^\/quiz\/(past|next|cat|end)\/?$/);
     const resultPath = path.match(
@@ -272,15 +272,12 @@ function App() {
       setSelected(null);
       setScreen("admin");
     } else {
-      history.replaceState(null, "", siteUrl("/quiz/past"));
-      await enterProduct("past");
-      setError("没有找到这个测评入口，已返回上一世测评。");
+      history.replaceState(null, "", siteUrl("/"));
+      home();
+      setError("没有找到这个入口，已返回导航页。");
     }
   }
   useEffect(() => {
-    // Normalize the landing URL before API loading, retaining preview credentials.
-    if (location.pathname === "/")
-      history.replaceState(null, "", siteUrl("/quiz/past"));
     void (async () => {
       try {
         const session = await api<{ csrf: string; admin: boolean }>("/session");
@@ -323,17 +320,16 @@ function App() {
     [poster],
   );
   function home() {
-    const id = selected || "past";
-    setScreen("code");
+    setScreen("home");
     setError("");
     setResult(null);
     setPublicView(false);
-    setSelected(id);
+    setSelected(null);
     setCode("");
     setGrant("");
     setAttempt(null);
-    if (location.pathname !== "/quiz/" + id)
-      history.pushState(null, "", siteUrl("/quiz/" + id));
+    if (location.pathname !== "/")
+      history.pushState(null, "", siteUrl("/"));
   }
   function choose(id: ProductId) {
     if (location.pathname !== "/quiz/" + id)
@@ -524,20 +520,13 @@ function App() {
         notify("请长按图片，选择保存到相册");
     }
   }
-  const back = () => {
-    setError("");
-    if (screen === "quiz") {
-      if (index > 0) setIndex(index - 1);
-      else home();
-    } else home();
-  };
   return (
     <div
       className={"app theme-" + (selected || result?.report.product || "past")}
     >
       <header>
         <a
-          href={siteUrl("/quiz/" + (selected || "past"))}
+          href={siteUrl("/")}
           onClick={(e) => {
             e.preventDefault();
             home();
@@ -549,9 +538,11 @@ function App() {
             灵魂小馆<small>SOUL ATLAS</small>
           </span>
         </a>
-        <button className="quiet" onClick={back}>
-          {screen === "loading" ? "人间身份档案" : "← 返回"}
-        </button>
+        {screen === "home" ? <span className="quiet">测评与选择导航</span> : (
+          <button className="quiet" onClick={home}>
+            ← 返回导航
+          </button>
+        )}
       </header>
       {error && (
         <div role="alert" className="error">
@@ -564,6 +555,38 @@ function App() {
       {screen === "loading" && !error && (
         <main className="center" aria-live="polite">正在打开你的档案…</main>
       )}
+      {screen === "home" && (
+        <main className="home">
+          <section className="hero">
+            <span className="eyebrow">灵魂小馆 · 产品导航</span>
+            <h1>发现另一面的自己，<br /><span>也给纠结一个方向。</span></h1>
+            <p>选一份趣味测评，或把正在纠结的问题交给 JEV。</p>
+          </section>
+          <nav className="catalog" aria-label="产品导航">
+            <a className="product product-jev" href={siteUrl("/jev/")}>
+              <div className="product-top"><span>日常辅助决策</span><span>新加入</span></div>
+              <div className="jev-navigation-mark" aria-hidden="true">J<span>要不要 / 选哪个</span></div>
+              <h2>JEV 帮你选</h2>
+              <p>写下问题和已知背景，看看 JEV 更偏向哪个选项。</p>
+              <div className="product-foot"><span>一个问题，一次选择</span><span>开始选择 →</span></div>
+            </a>
+            {(Object.keys(meta) as ProductId[]).map((id) => (
+              <a className={"product product-" + id} key={id} href={siteUrl("/quiz/" + id)} onClick={(event) => {
+                if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                event.preventDefault();
+                choose(id);
+              }}>
+                <div className="product-top"><span>趣味自我探索</span><span>24 道生活题</span></div>
+                <Glyph kind={id} />
+                <h2>{meta[id].title}</h2>
+                <p>{meta[id].subtitle}</p>
+                <div className="product-foot"><span>{meta[id].tag}</span><span>进入测评 →</span></div>
+              </a>
+            ))}
+          </nav>
+          <p className="home-note">四款测评与 JEV 共用通用测评码，每码 3 次机会，成功生成结果才扣次。</p>
+        </main>
+      )}
       {screen === "code" && selected && (
         <main className="center">
           <div className="entry-card">
@@ -571,9 +594,9 @@ function App() {
             <span className="eyebrow">你的故事，从这里开始</span>
             <h1>{meta[selected].title}</h1>
             <p>
-              请输入通用测评码，四款测评都可以使用。
+              请输入通用测评码，四款测评和 JEV 都可以使用。
               <br />
-              每个码有3次完整测评机会，生成结果后才扣次。
+              每个码有3次结果生成机会，生成结果后才扣次。
             </p>
             <form
               onSubmit={(e) => {
@@ -596,7 +619,7 @@ function App() {
                 {busy ? "正在验证…" : "解锁我的档案 →"}
               </button>
             </form>
-            <small>四款共享3次机会，可测不同款，也可重复测同一款。</small>
+            <small>四款测评与 JEV 共享3次机会，可重复使用同一产品。</small>
           </div>
         </main>
       )}
@@ -605,7 +628,7 @@ function App() {
           <div className="entry-card">
             <Glyph kind={selected} />
             <span className="eyebrow">
-              档案已解锁 · 四款共剩 {remaining} 次
+              档案已解锁 · 通用码共剩 {remaining} 次
             </span>
             <h1>把真实的你带进来。</h1>
             <p>

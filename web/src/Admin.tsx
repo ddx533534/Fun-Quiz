@@ -86,7 +86,7 @@ export default function Admin({ request, admin, setAdmin, onError, notify }: Pro
   </div></main>;
   return <main className="admin-page" aria-busy={busy}>
     <div className="admin-heading">
-      <div><span className="eyebrow">小馆管理室</span><h1>测评码管理</h1><p>四款通用 · 每个码累计生成3次结果后用完</p></div>
+      <div><span className="eyebrow">小馆管理室</span><h1>测评码管理</h1><p>四款测评与 JEV 通用 · 每个码累计生成3次结果后用完</p></div>
       <div className="admin-actions">
         <button className="secondary" disabled={busy} onClick={() => void run(() => loadBatches())}>刷新列表</button>
         <button className="quiet" disabled={busy} onClick={() => void run(async () => { await request("/admin/logout", "POST", {}); clear(); setAdmin(false); })}>退出管理端</button>

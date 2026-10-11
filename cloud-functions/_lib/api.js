@@ -1,5 +1,6 @@
 import { createHash, createHmac, randomBytes, randomUUID, createCipheriv, createDecipheriv, timingSafeEqual } from 'node:crypto';
 import { catalog, generate, validProduct, validAnswers, publicReport } from './generator.js';
+import { decide } from './jev/decide.js';
 
 class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -15,7 +16,7 @@ const random = () => randomBytes(32).toString('base64url');
 // Best-effort read/modify/write; deliberately no distributed lock or transaction.
 // Completed records and quota are committed in the SAME code object. Pointers
 // are written first and never confer access unless that authoritative record exists.
-export function createApi({ store, secret, adminKey, publicOrigin, production = true, clock = () => Date.now() / 1000 }) {
+export function createApi({ store, secret, adminKey, publicOrigin, production = true, clock = () => Date.now() / 1000, jevApiKey, fetch: fetcher }) {
   if (secret?.length < 40 || !secret || adminKey?.length < 32 || !adminKey || secret.includes('REPLACE') || adminKey.includes('REPLACE')) throw new Error('APP_SECRET >= 40 and ADMIN_KEY >= 32 are required');
   const origin = new URL(publicOrigin).origin;
   if (production && !origin.startsWith('https://')) throw new Error('PUBLIC_ORIGIN must be HTTPS');
@@ -104,8 +105,9 @@ export function createApi({ store, secret, adminKey, publicOrigin, production = 
       }
       return { csrf: row.csrf, admin: row.admin_until > clock() };
     }
-    if (method === 'POST' && path === '/api/codes/verify') {
-      if (!validProduct(body.product) || typeof body.code !== 'string' || body.code.length > 32) fail(422, '测评码或产品格式不正确');
+    if (method === 'POST' && (path === '/api/codes/verify' || path === '/api/jev/redeem')) {
+      const product = path === '/api/jev/redeem' ? 'jev' : body.product;
+      if (!(validProduct(product) || product === 'jev') || typeof body.code !== 'string' || body.code.length > 32) fail(422, '测评码或产品格式不正确');
       const user = await visitor(request);
       if (!await rate('verify-ip', context.ip, 30, 600) || !await rate('verify-user', user.id, 15, 600)) fail(429, '尝试次数较多，请十分钟后再试');
       const clean = body.code.replace(/[- ]/g, '').toUpperCase(), codeKey = digest('code:' + clean);
@@ -114,7 +116,51 @@ export function createApi({ store, secret, adminKey, publicOrigin, production = 
       if (!remaining(code)) fail(409, '这个测评码的三次机会已经用完');
       const id = digest('grant:' + user.id + ':' + codeKey);
       await put('grants/' + id, { visitor: user.id, code: codeKey });
-      return { grant_id: id, remaining: remaining(code), product: body.product };
+      if (product === 'jev') {
+        user.jev_grant = id;
+        await put('sessions/' + user.id, user);
+      }
+      return { grant_id: id, remaining: remaining(code), remainingUses: remaining(code), product };
+    }
+    if ((method === 'GET' && path === '/api/jev/credits') || (method === 'POST' && path === '/api/jev/decide')) {
+      const user = await visitor(request), grant = user.jev_grant ? await get('grants/' + user.jev_grant) : null;
+      if (!grant || grant.visitor !== user.id) fail(401, '请先输入通用测评码');
+      let code = await get('codes/' + grant.code);
+      if (!code?.active) fail(403, '这个测评码已停用');
+      if (method === 'GET') return { status: 'success', remainingUses: remaining(code) };
+      if (!keyPart(body.request_key) || body.request_key.length < 16) fail(422, '请求编号不正确，请刷新后重试');
+      const input = { mode: body.mode, question: body.question, context: body.context, options: body.options };
+      const inputKey = digest('jev-input:' + JSON.stringify(input));
+      const id = digest('jev-result:' + grant.code + ':' + user.id + ':' + body.request_key);
+      const snapshotKey = 'jev-results/' + id;
+      const saved = await get(snapshotKey), old = saved?.committed || code.completed[id];
+      if (old) {
+        if (old.input_key !== inputKey) fail(409, '请求编号已用于其他问题，请重新提交');
+        if (!saved?.committed) await put(snapshotKey, { committed: old });
+        return { ...old.decision, remainingUses: remaining(code) };
+      }
+      if (!remaining(code)) fail(409, '这个测评码的三次机会已经用完');
+      const holds = Object.entries(code.holds).filter(([key, hold]) => hold.expires > clock() && !code.completed[key] && key !== id);
+      if (Object.keys(code.completed).length + holds.length >= 3) fail(409, '机会已用完或有其他设备正在测评，请稍后重试');
+      code.holds = Object.fromEntries(holds);
+      code.holds[id] = { visitor: user.id, product: 'jev', expires: clock() + 120 };
+      await put('codes/' + grant.code, code);
+      const response = await decide(input, { apiKey: jevApiKey, fetch: fetcher });
+      code = await get('codes/' + grant.code);
+      if (!response.ok) {
+        if (code) { delete code.holds[id]; await put('codes/' + grant.code, code); }
+        return response;
+      }
+      if (!code?.active) fail(403, '这个测评码已停用');
+      if (code.completed[id]) return { ...code.completed[id].decision, remainingUses: remaining(code) };
+      if (!remaining(code)) fail(409, '这个测评码的三次机会已经用完');
+      const decision = await response.json();
+      code.completed[id] = { id, visitor: user.id, product: 'jev', input_key: inputKey, decision, created: clock() };
+      delete code.holds[id];
+      // The decision and shared usage commit together; retry repairs snapshot publication.
+      await put('codes/' + grant.code, code);
+      await put(snapshotKey, { committed: code.completed[id] });
+      return { ...decision, remainingUses: remaining(code) };
     }
     if (method === 'POST' && path === '/api/attempts') {
       if (!validProduct(body.product) || !keyPart(body.grant_id)) fail(422, '未知测评或授权格式不正确');
@@ -282,7 +328,7 @@ export function createApi({ store, secret, adminKey, publicOrigin, production = 
       const batch = await get('batches/' + exportMatch[1]);
       if (!batch?.ready) fail(404, '未找到可导出的批次');
       const codes = JSON.parse(decrypt(batch.encrypted));
-      return new Response('\ufeff测评码,测评,可用次数\r\n' + codes.map(c => c + ',四款通用（合计3次）,3\r\n').join(''), {
+      return new Response('\ufeff测评码,测评,可用次数\r\n' + codes.map(c => c + ',四款测评及JEV通用（合计3次）,3\r\n').join(''), {
         headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="quiz-codes-all-${batch.id}.csv"` },
       });
     }

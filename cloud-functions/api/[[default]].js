@@ -9,6 +9,7 @@ export async function onRequest(context) {
       secret: process.env.APP_SECRET,
       adminKey: process.env.ADMIN_KEY,
       publicOrigin: process.env.PUBLIC_ORIGIN,
+      jevApiKey: context.env?.TYPESAFE_API_KEY || process.env.TYPESAFE_API_KEY,
     });
     return await handler(context.request, context);
   } catch {

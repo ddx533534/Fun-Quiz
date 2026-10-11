@@ -32,7 +32,8 @@ const store = {
   },
 };
 const port = Number(process.env.PORT || 8001), origin = 'http://127.0.0.1:' + port;
-const api = createApi({ store, secret: secrets.secret, adminKey: secrets.admin, publicOrigin: origin, production: false });
+const api = createApi({ store, secret: secrets.secret, adminKey: secrets.admin, publicOrigin: origin, production: false,
+  jevApiKey: process.env.TYPESAFE_API_KEY });
 createServer(async (req, res) => {
   try {
     const url = new URL(req.url, origin);
@@ -46,9 +47,11 @@ createServer(async (req, res) => {
       res.end(Buffer.from(await response.arrayBuffer()));
     } else {
       const dist = resolve(root, 'web/dist');
-      const file = url.pathname.startsWith('/assets/') ? resolve(dist, '.' + url.pathname) : resolve(dist, 'index.html');
-      if (!file.startsWith(dist)) { res.writeHead(404); res.end(); return; }
-      const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css' };
+      const isJev = url.pathname === '/jev' || url.pathname.startsWith('/jev/');
+      const isAsset = url.pathname.startsWith('/assets/') || url.pathname.startsWith('/jev/assets/') || url.pathname === '/jev/favicon.svg';
+      const file = isAsset ? resolve(dist, '.' + url.pathname) : resolve(dist, isJev ? 'jev/index.html' : 'index.html');
+      if (!file.startsWith(dist + '\\') && !file.startsWith(dist + '/')) { res.writeHead(404); res.end(); return; }
+      const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml' };
       res.writeHead(200, { 'Content-Type': types[extname(file)] || 'application/octet-stream' });
       res.end(await readFile(file));
     }

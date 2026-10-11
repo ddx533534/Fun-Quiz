@@ -64,11 +64,12 @@ for (const [id, title] of [
   assert.equal(await page.title(), title + " · 灵魂小馆");
 }
 await page.goto(origin);
-await page.getByRole("heading", { name: "你的上一世是什么？", exact: true }).waitFor();
-assert.equal(new URL(page.url()).pathname, "/quiz/past");
-assert.equal(await page.locator(".catalog").count(), 0);
+await page.getByRole("navigation", { name: "产品导航" }).waitFor();
+assert.equal(new URL(page.url()).pathname, "/");
+assert.equal(await page.locator(".catalog a").count(), 5);
+assert.equal(await page.getByRole("link", { name: /JEV 帮你选/ }).getAttribute("href"), "/jev/");
 await page.reload();
-await page.getByLabel("测评码", { exact: true }).waitFor();
+await page.getByRole("navigation", { name: "产品导航" }).waitFor();
 await page.screenshot({
   path: "../test-artifacts/home-mobile.png",
   fullPage: true,
@@ -80,6 +81,8 @@ assert.equal(
   true,
 );
 
+await page.getByRole("link", { name: /你的上一世是什么/ }).click();
+await page.getByLabel("测评码", { exact: true }).waitFor();
 assert.equal(new URL(page.url()).pathname, "/quiz/past");
 await page.getByLabel("测评码", { exact: true }).fill(code);
 await page.getByRole("button", { name: "解锁我的档案" }).click();
@@ -106,9 +109,9 @@ for (let i = 0; i < 24; i++) {
     await page.getByLabel("测评码", { exact: true }).waitFor();
     assert.equal(await page.locator(".question").count(), 0);
     await page.goto(origin);
-    await page.getByText("生活片段 02", { exact: true }).waitFor();
-    assert.equal(new URL(page.url()).pathname, "/quiz/past");
-    assert.equal(await page.locator(".catalog").count(), 0);
+    await page.getByRole("navigation", { name: "产品导航" }).waitFor();
+    assert.equal(new URL(page.url()).pathname, "/");
+    assert.equal(await page.locator(".catalog a").count(), 5);
     await page.goto(origin + "/quiz/past");
     await page.getByText("生活片段 02", { exact: true }).waitFor();
   }
@@ -227,9 +230,9 @@ const desktop = await browser.newContext({
 });
 const desktopPage = await desktop.newPage();
 await desktopPage.goto(origin);
-await desktopPage.getByRole("heading", { name: "你的上一世是什么？", exact: true }).waitFor();
-assert.equal(new URL(desktopPage.url()).pathname, "/quiz/past");
-assert.equal(await desktopPage.locator(".catalog").count(), 0);
+await desktopPage.getByRole("navigation", { name: "产品导航" }).waitFor();
+assert.equal(new URL(desktopPage.url()).pathname, "/");
+assert.equal(await desktopPage.locator(".catalog a").count(), 5);
 await desktopPage.screenshot({
   path: "../test-artifacts/home-desktop.png",
   fullPage: true,

@@ -165,6 +165,28 @@ header {
   background: #e7ecee;
   color: #577e99;
 }
+.product-jev {
+  background: #e8e7f1;
+  color: #66578e;
+  grid-column: 1 / -1;
+}
+.jev-navigation-mark {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  margin: 20px 0;
+  font-size: 54px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.jev-navigation-mark span {
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 2px;
+}
+.home-note {
+  text-align: center;
+}
 .product-cat {
   background: #f0e8d6;
   color: #a07935;
