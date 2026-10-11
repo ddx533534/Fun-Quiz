@@ -172,8 +172,8 @@ function App() {
   const [products, setProducts] = useState<Product[]>([]);
   const [selected, setSelected] = useState<ProductId | null>(null);
   const [screen, setScreen] = useState<
-    "home" | "code" | "ready" | "quiz" | "result" | "admin"
-  >("home");
+    "loading" | "code" | "ready" | "quiz" | "result" | "admin"
+  >("loading");
   const [code, setCode] = useState("");
   const [grant, setGrant] = useState("");
   const [remaining, setRemaining] = useState(3);
@@ -253,7 +253,11 @@ function App() {
   }
   async function openPath() {
     setError("");
-    const path = location.pathname;
+    let path = location.pathname;
+    if (path === "/") {
+      history.replaceState(null, "", siteUrl("/quiz/past"));
+      path = "/quiz/past";
+    }
     const entry = path.match(/^\/quiz\/(past|next|cat|end)\/?$/);
     const resultPath = path.match(
       /^\/quiz\/(past|next|cat|end)\/result\/([^/]+)$/,
@@ -272,14 +276,15 @@ function App() {
       setSelected(null);
       setScreen("admin");
     } else {
-      setSelected(null);
-      setResult(null);
-      setPublicView(false);
-      setScreen("home");
-      if (path !== "/") setError("没有找到这个测评入口，请从下方选择。");
+      history.replaceState(null, "", siteUrl("/quiz/past"));
+      await enterProduct("past");
+      setError("没有找到这个测评入口，已返回上一世测评。");
     }
   }
   useEffect(() => {
+    // Normalize the landing URL before API loading, retaining preview credentials.
+    if (location.pathname === "/")
+      history.replaceState(null, "", siteUrl("/quiz/past"));
     void (async () => {
       try {
         const session = await api<{ csrf: string; admin: boolean }>("/session");
@@ -322,12 +327,17 @@ function App() {
     [poster],
   );
   function home() {
-    setScreen("home");
+    const id = selected || "past";
+    setScreen("code");
     setError("");
     setResult(null);
     setPublicView(false);
-    setSelected(null);
-    if (location.pathname !== "/") history.pushState(null, "", siteUrl("/"));
+    setSelected(id);
+    setCode("");
+    setGrant("");
+    setAttempt(null);
+    if (location.pathname !== "/quiz/" + id)
+      history.pushState(null, "", siteUrl("/quiz/" + id));
   }
   function choose(id: ProductId) {
     if (location.pathname !== "/quiz/" + id)
@@ -531,7 +541,7 @@ function App() {
     >
       <header>
         <a
-          href={siteUrl("/")}
+          href={siteUrl("/quiz/" + (selected || "past"))}
           onClick={(e) => {
             e.preventDefault();
             home();
@@ -544,7 +554,7 @@ function App() {
           </span>
         </a>
         <button className="quiet" onClick={back}>
-          {screen === "home" ? "人间身份档案" : "← 返回"}
+          {screen === "loading" ? "人间身份档案" : "← 返回"}
         </button>
       </header>
       {error && (
@@ -555,58 +565,8 @@ function App() {
           </button>
         </div>
       )}
-      {screen === "home" && (
-        <main className="home">
-          <div className="hero">
-            <span className="eyebrow">给忙着做人、偶尔想逃跑的你</span>
-            <h1>
-              如果换一种身份，
-              <br />
-              你会是谁<span>？</span>
-            </h1>
-            <p>
-              用24个生活片段，认出藏在你心里的另一个自己。
-              <br />
-              不用变得更好，先看看自己有多有趣。
-            </p>
-            <div className="hero-stamp">
-              本日营业
-              <br />
-              <b>接待各种灵魂</b>
-            </div>
-          </div>
-          <div className="catalog">
-            {products.map((p) => (
-              <a
-                className={"product product-" + p.id}
-                key={p.id}
-                href={siteUrl("/quiz/" + p.id)}
-                onClick={(e) => {
-                  if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
-                  e.preventDefault();
-                  choose(p.id);
-                }}
-              >
-                <div className="product-top">
-                  <span>{meta[p.id].tag}</span>
-                  <span>0{products.indexOf(p) + 1}</span>
-                </div>
-                <Glyph kind={p.id} />
-                <h2>{meta[p.id].title}</h2>
-                <p>{meta[p.id].subtitle}</p>
-                <div className="product-foot">
-                  <span>24道题 · 约5分钟</span>
-                  <b>打开档案 ↗</b>
-                </div>
-              </a>
-            ))}
-          </div>
-          <div className="home-note">
-            <span>✦ 回答相同，身份相同</span>
-            <span>✦ 可回到上一题修改</span>
-            <span>✦ 保存专属结果卡</span>
-          </div>
-        </main>
+      {screen === "loading" && !error && (
+        <main className="center" aria-live="polite">正在打开你的档案…</main>
       )}
       {screen === "code" && selected && (
         <main className="center">
