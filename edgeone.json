@@ -5,17 +5,21 @@
   "nodeVersion": "22.11.0",
   "rewrites": [
     {
-      "source": "/jev",
-      "destination": "/jev/index.html"
+      "source": "/quiz/jev",
+      "destination": "/quiz/jev/index.html"
     },
     {
-      "source": "/jev/",
-      "destination": "/jev/index.html"
+      "source": "/quiz/jev/",
+      "destination": "/quiz/jev/index.html"
     },
     {
       "source": "/*",
       "destination": "/index.html"
     }
+  ],
+  "redirects": [
+    { "source": "/jev", "destination": "/quiz/jev", "statusCode": 302 },
+    { "source": "/jev/", "destination": "/quiz/jev", "statusCode": 302 }
   ],
   "headers": [
     {

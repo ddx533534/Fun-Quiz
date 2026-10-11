@@ -37,6 +37,10 @@ const api = createApi({ store, secret: secrets.secret, adminKey: secrets.admin, 
 createServer(async (req, res) => {
   try {
     const url = new URL(req.url, origin);
+    if (url.pathname === '/jev' || url.pathname === '/jev/') {
+      res.writeHead(302, { Location: '/quiz/jev' + url.search });
+      res.end(); return;
+    }
     if (url.pathname.startsWith('/api/')) {
       const parts = [];
       for await (const chunk of req) parts.push(chunk);
@@ -47,9 +51,9 @@ createServer(async (req, res) => {
       res.end(Buffer.from(await response.arrayBuffer()));
     } else {
       const dist = resolve(root, 'web/dist');
-      const isJev = url.pathname === '/jev' || url.pathname.startsWith('/jev/');
-      const isAsset = url.pathname.startsWith('/assets/') || url.pathname.startsWith('/jev/assets/') || url.pathname === '/jev/favicon.svg';
-      const file = isAsset ? resolve(dist, '.' + url.pathname) : resolve(dist, isJev ? 'jev/index.html' : 'index.html');
+      const isJev = url.pathname === '/quiz/jev' || url.pathname.startsWith('/quiz/jev/');
+      const isAsset = url.pathname.startsWith('/assets/') || url.pathname.startsWith('/quiz/jev/assets/') || url.pathname === '/quiz/jev/favicon.svg';
+      const file = isAsset ? resolve(dist, '.' + url.pathname) : resolve(dist, isJev ? 'quiz/jev/index.html' : 'index.html');
       if (!file.startsWith(dist + '\\') && !file.startsWith(dist + '/')) { res.writeHead(404); res.end(); return; }
       const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml' };
       res.writeHead(200, { 'Content-Type': types[extname(file)] || 'application/octet-stream' });

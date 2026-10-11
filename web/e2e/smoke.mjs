@@ -67,7 +67,7 @@ await page.goto(origin);
 await page.getByRole("navigation", { name: "产品导航" }).waitFor();
 assert.equal(new URL(page.url()).pathname, "/");
 assert.equal(await page.locator(".catalog a").count(), 5);
-assert.equal(await page.getByRole("link", { name: /JEV 帮你选/ }).getAttribute("href"), "/jev/");
+assert.equal(await page.getByRole("link", { name: /JEV 帮你选/ }).getAttribute("href"), "/quiz/jev");
 await page.reload();
 await page.getByRole("navigation", { name: "产品导航" }).waitFor();
 await page.screenshot({

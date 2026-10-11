@@ -148,20 +148,23 @@ test('JEV respects quiz reservations before invoking the paid upstream', async (
 });
 
 test('JEV session and decision requests retain EdgeOne preview credentials', () => {
-  const page = 'https://x.edgeone.app/jev?eo_token=abc&eo_time=123';
+  const page = 'https://x.edgeone.app/quiz/jev?eo_token=abc&eo_time=123';
   assert.equal(apiUrl('/credits', page), '/api/jev/credits?eo_token=abc&eo_time=123');
   assert.equal(sessionUrl(page), '/api/session?eo_token=abc&eo_time=123');
-  assert.equal(apiUrl('/credits', 'https://quiz.example/jev?eo_token=abc'), '/api/jev/credits');
+  assert.equal(apiUrl('/credits', 'https://quiz.example/quiz/jev?eo_token=abc'), '/api/jev/credits');
 });
 
 test('JEV deployment rewrites entry pages without capturing scripts, styles or favicon', async () => {
   const config = JSON.parse(await readFile(new URL('../edgeone.json', import.meta.url), 'utf8'));
-  const routes = config.rewrites.filter(rule => rule.source.startsWith('/jev'));
+  const routes = config.rewrites.filter(rule => rule.source.startsWith('/quiz/jev'));
   const matches = (source, path) => new RegExp('^' + source.split('*').map(part => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$').test(path);
-  for (const page of ['/jev', '/jev/']) {
-    assert.equal(routes.find(rule => matches(rule.source, page))?.destination, '/jev/index.html');
+  for (const page of ['/quiz/jev', '/quiz/jev/']) {
+    assert.equal(routes.find(rule => matches(rule.source, page))?.destination, '/quiz/jev/index.html');
   }
-  for (const asset of ['/jev/assets/index-BHuq-yRv.js', '/jev/assets/index-DbIdjt5v.css', '/jev/favicon.svg']) {
+  for (const asset of ['/quiz/jev/assets/app.js', '/quiz/jev/assets/app.css', '/quiz/jev/favicon.svg']) {
     assert.equal(routes.some(rule => matches(rule.source, asset)), false, asset + ' must remain a static asset');
+  }
+  for (const legacy of ['/jev', '/jev/']) {
+    assert.equal(config.redirects.find(rule => rule.source === legacy)?.destination, '/quiz/jev');
   }
 });

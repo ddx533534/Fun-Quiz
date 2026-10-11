@@ -8,7 +8,7 @@
 | 你的下一世是什么？ | `/quiz/next` |
 | 你是哪一种流浪猫？ | `/quiz/cat` |
 | 末世来临，你会变成什么动物？ | `/quiz/end` |
-| JEV 帮你选 | `/jev` |
+| JEV 帮你选 | `/quiz/jev` |
 
 默认访问根路径 `/` 显示五个产品的导航页，四款测评与 JEV 均可通过各自的独立地址直接访问。
 
@@ -92,7 +92,7 @@ Blob测试覆盖顺序3次额度、批次恢复、幂等重试、答题进度、
 
 ## JEV 帮你选
 
-从同级 `jev-product/edgeone` 迁入，独立前端位于 `jev/`，统一构建到 `web/dist/jev/`。访问 `/jev` 或 `/jev/`，保留原页面、要不要/选哪个、兑换码、次数恢复和结果展示。
+从同级 `jev-product/edgeone` 迁入，独立前端位于 `jev/`，统一构建到 `web/dist/quiz/jev/`。正式入口为 `/quiz/jev`，也支持尾部斜杠；原 `/jev` 和 `/jev/` 跳转到正式入口。保留原页面、要不要/选哪个、测评码、次数恢复和结果展示。
 
 JEV 接口为 `/api/jev/redeem`、`/api/jev/credits`、`/api/jev/decide`，由现有 Makers Node 云函数处理。与四款测评共用 `fun-quiz-v1` Blob 命名空间、HttpOnly 会话、Origin/CSRF 检查和码验证限流。统一在 `/admin` 生成及导出通用码，现有16位通用码也可直接在 JEV 使用；每码在四款测评及 JEV 之间合计生成3次结果。验证、查看次数和相同请求重试不重复扣次。JEV 结果与使用记录在同一码对象中提交，独立快照用于恢复已完成结果。
 

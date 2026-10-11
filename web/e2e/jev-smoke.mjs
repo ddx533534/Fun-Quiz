@@ -21,7 +21,7 @@ try {
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     page.on('response', response => {
-      if (response.url().includes('/jev/assets/') && !response.ok()) errors.push('asset: ' + response.status());
+      if (response.url().includes('/quiz/jev/assets/') && (!response.ok() || response.headers()['content-type']?.includes('text/html'))) errors.push('invalid asset: ' + response.url());
     });
     let remaining = 3, verified = false;
     // Use real unified-code generation/verification; simulate paid decisions only.
@@ -47,9 +47,10 @@ try {
       }
       await route.fulfill({ json: data });
     });
-    for (const path of ['/jev', '/jev/']) {
+    for (const path of ['/quiz/jev', '/quiz/jev/', '/jev', '/jev/']) {
       await page.goto(origin + path);
       await page.getByRole('heading', { name: '不写小作文，直接帮你选' }).waitFor();
+      assert.ok(['/quiz/jev', '/quiz/jev/'].includes(new URL(page.url()).pathname));
       await page.reload();
       await page.getByRole('heading', { name: '输入通用测评码，开始使用' }).waitFor();
     }

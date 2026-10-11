@@ -563,7 +563,7 @@ function App() {
             <p>选一份趣味测评，或把正在纠结的问题交给 JEV。</p>
           </section>
           <nav className="catalog" aria-label="产品导航">
-            <a className="product product-jev" href={siteUrl("/jev/")}>
+            <a className="product product-jev" href={siteUrl("/quiz/jev")}>
               <div className="product-top"><span>日常辅助决策</span><span>新加入</span></div>
               <div className="jev-navigation-mark" aria-hidden="true">J<span>要不要 / 选哪个</span></div>
               <h2>JEV 帮你选</h2>
